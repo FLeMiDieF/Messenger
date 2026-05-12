@@ -127,8 +127,12 @@ def delete_channel(channel_id):
     ch = _get_member_channel(channel_id)
     if ch.owner_id != current_user.id:
         return jsonify({"error": "Только владелец может удалить канал"}), 403
+    member_ids = [m.user_id for m in ch.members]
     db.session.delete(ch)
     db.session.commit()
+    from extensions import socketio
+    for uid in member_ids:
+        socketio.emit("channel_deleted", {"channel_id": channel_id}, room=f"user_{uid}")
     return jsonify({"ok": True})
 
 
@@ -148,12 +152,15 @@ def invite_member(channel_id):
     db.session.add(ChannelMember(channel_id=ch.id, user_id=user.id, role="member"))
     db.session.commit()
 
-    # Notify the invited user in real-time
+    from extensions import socketio
+    # Notify the invited user so channel appears in their sidebar
     ch_data = ch.to_dict(user.id)
     ch_data["last_message"] = ""
     ch_data["last_at"] = ch.created_at.isoformat()
-    from extensions import socketio
     socketio.emit("channel_invite", ch_data, room=f"user_{user.id}")
+    # Notify everyone viewing the channel that a new member appeared
+    member_data = {**user.to_dict(), "role": "member", "channel_id": ch.id}
+    socketio.emit("member_joined", member_data, room=f"channel_{ch.id}")
 
     return jsonify({**user.to_dict(), "role": "member"}), 201
 

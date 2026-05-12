@@ -113,8 +113,8 @@ class Message(db.Model):
             "content": "" if self.is_deleted else self.content,
             "is_deleted": self.is_deleted,
             "is_hidden": hidden,
-            "created_at": self.created_at.isoformat(),
-            "edited_at": self.edited_at.isoformat() if self.edited_at else None,
+            "created_at": self.created_at.isoformat() + "Z",
+            "edited_at": self.edited_at.isoformat() + "Z" if self.edited_at else None,
         }
 
 

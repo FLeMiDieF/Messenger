@@ -197,6 +197,22 @@ body { background: var(--bg-3); color: var(--text); font-family: 'Segoe UI', san
 }
 .msg-edit-hint { font-size: .75rem; color: var(--text-muted); margin-top: .2rem; }
 
+/* Date separator */
+.date-sep {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin: .9rem 0 .4rem;
+  color: var(--text-muted);
+  font-size: .72rem;
+}
+.date-sep::before, .date-sep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bg-4);
+}
+
 /* Typing indicator */
 .typing-indicator {
   font-size: .8rem;

@@ -87,6 +87,33 @@ socket.on("dm_deleted", ({ channel_id }) => {
   }
 });
 
+socket.on("channel_deleted", ({ channel_id }) => {
+  allChannels = allChannels.filter(c => c.id !== channel_id);
+  renderSidebar(allChannels);
+  if (currentChannel?.id === channel_id) {
+    currentChannel = null;
+    document.getElementById("chatView").classList.add("d-none");
+    document.getElementById("welcomeScreen").classList.remove("d-none");
+  }
+});
+
+socket.on("member_joined", (member) => {
+  if (member.channel_id !== currentChannel?.id) return;
+  if (document.querySelector(`[data-uid="${member.id}"]`)) return;
+  currentChannel.member_count = (currentChannel.member_count || 0) + 1;
+  document.getElementById("chatMeta").textContent = `${currentChannel.member_count} участников`;
+  const list = document.getElementById("membersList");
+  const div = document.createElement("div");
+  div.className = "member-item";
+  div.dataset.uid = member.id;
+  div.innerHTML = `
+    <div class="online-dot ${member.is_online ? "" : "offline-dot"}"></div>
+    <div class="avatar avatar-sm" style="cursor:pointer"
+         onclick="showUserProfile(${member.id},'${esc(member.username)}',event)">${member.username[0].toUpperCase()}</div>
+    <span style="font-size:.88rem;overflow:hidden;text-overflow:ellipsis">${esc(member.username)}</span>`;
+  list.appendChild(div);
+});
+
 socket.on("member_left", ({ channel_id, user_id }) => {
   if (channel_id !== currentChannel?.id) return;
   // Remove from members panel
@@ -299,7 +326,8 @@ async function loadMessages(channelId) {
   area.innerHTML = "";
   const msgs = await api(`/api/channels/${channelId}/messages`);
   if (msgs.length) oldestMsgId = msgs[0].id;
-  msgs.forEach(appendMessage);
+  msgs.forEach(m => area.appendChild(buildMessageEl(m)));
+  rebuildDateSeparators();
   scrollBottom();
   document.getElementById("loadMoreBtn").style.display =
     msgs.length >= 50 ? "block" : "none";
@@ -312,8 +340,40 @@ async function loadMoreMessages() {
   oldestMsgId = msgs[0].id;
   const area = document.getElementById("messagesList");
   const prevH = area.scrollHeight;
-  msgs.forEach(m => prependMessage(m));
+  msgs.forEach(m => area.insertBefore(buildMessageEl(m), area.firstChild));
+  rebuildDateSeparators();
   area.parentElement.scrollTop += area.scrollHeight - prevH;
+}
+
+/* ── Date separators ───────────────────────────────────── */
+function getDateLabel(isoStr) {
+  const d = new Date(isoStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Сегодня";
+  if (d.toDateString() === yesterday.toDateString()) return "Вчера";
+  return d.toLocaleDateString("ru", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function makeDateSeparator(label) {
+  const el = document.createElement("div");
+  el.className = "date-sep";
+  el.innerHTML = `<span>${label}</span>`;
+  return el;
+}
+
+function rebuildDateSeparators() {
+  const area = document.getElementById("messagesList");
+  area.querySelectorAll(".date-sep").forEach(el => el.remove());
+  let lastDate = null;
+  area.querySelectorAll(".msg-group").forEach(el => {
+    const d = el.dataset.msgDate;
+    if (d && d !== lastDate) {
+      area.insertBefore(makeDateSeparator(el.dataset.msgDateLabel), el);
+      lastDate = d;
+    }
+  });
 }
 
 /* ── Message search ────────────────────────────────────── */
@@ -344,6 +404,11 @@ function clearMsgSearch() {
 
 function appendMessage(msg) {
   const area = document.getElementById("messagesList");
+  const msgDate = new Date(msg.created_at).toDateString();
+  const lastGroup = area.querySelector(".msg-group:last-of-type");
+  if (!lastGroup || lastGroup.dataset.msgDate !== msgDate) {
+    area.appendChild(makeDateSeparator(getDateLabel(msg.created_at)));
+  }
   area.appendChild(buildMessageEl(msg));
   scrollBottom();
 }
@@ -363,6 +428,8 @@ function buildMessageEl(msg) {
   div.className = "msg-group";
   div.dataset.msgId = msg.id;
   div.dataset.senderId = msg.sender_id;
+  div.dataset.msgDate = new Date(msg.created_at).toDateString();
+  div.dataset.msgDateLabel = getDateLabel(msg.created_at);
 
   const time = new Date(msg.created_at).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
   const edited = msg.edited_at ? '<span class="msg-edited">(изменено)</span>' : "";
