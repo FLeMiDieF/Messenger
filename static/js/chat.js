@@ -59,6 +59,14 @@ socket.on("user_status", ({ user_id, is_online }) => {
   });
 });
 
+// Invited to a channel
+socket.on("channel_invite", ch => {
+  if (!allChannels.find(c => c.id === ch.id)) {
+    allChannels.unshift(ch);
+    renderSidebar(allChannels);
+  }
+});
+
 // New DM arrived while we're online
 socket.on("new_dm", ch => {
   if (!allChannels.find(c => c.id === ch.id)) {
@@ -251,7 +259,7 @@ function renderMembers(members) {
     div.dataset.uid = m.id;
     div.innerHTML = `
       <div class="online-dot ${m.is_online ? "" : "offline-dot"}"></div>
-      <div class="avatar avatar-sm">${m.username[0].toUpperCase()}</div>
+      <div class="avatar avatar-sm" style="cursor:pointer" onclick="showUserProfile(${m.id},'${esc(m.username)}',event)">${m.username[0].toUpperCase()}</div>
       <span style="font-size:.88rem;overflow:hidden;text-overflow:ellipsis">${esc(m.username)}</span>
       ${m.role !== "member" ? `<span class="member-role role-${m.role}">${m.role === "owner" ? "владелец" : "admin"}</span>` : ""}
       ${(!isMe && canManage) ? `

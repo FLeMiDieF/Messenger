@@ -147,6 +147,14 @@ def invite_member(channel_id):
         return jsonify({"error": "Уже в канале"}), 409
     db.session.add(ChannelMember(channel_id=ch.id, user_id=user.id, role="member"))
     db.session.commit()
+
+    # Notify the invited user in real-time
+    ch_data = ch.to_dict(user.id)
+    ch_data["last_message"] = ""
+    ch_data["last_at"] = ch.created_at.isoformat()
+    from extensions import socketio
+    socketio.emit("channel_invite", ch_data, room=f"user_{user.id}")
+
     return jsonify({**user.to_dict(), "role": "member"}), 201
 
 
