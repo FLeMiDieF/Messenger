@@ -3,7 +3,7 @@ from flask import request
 from flask_login import current_user
 from flask_socketio import join_room, leave_room, emit
 from extensions import socketio
-from models import db, Message, HiddenMessage, ChannelMember, Channel, User
+from models import db, Message, HiddenMessage, ChannelMember, Channel, User, BlockedUser
 
 
 def _get_membership(channel_id):
@@ -52,6 +52,22 @@ def on_send_message(data):
     content = (data.get("content") or "").strip()
     if not content or not _get_membership(channel_id):
         return
+
+    # Block check for DM channels
+    ch = Channel.query.get(channel_id)
+    if ch and ch.is_dm:
+        partner = next((m.user for m in ch.members if m.user_id != current_user.id), None)
+        if partner:
+            is_blocked = BlockedUser.query.filter(
+                db.or_(
+                    db.and_(BlockedUser.blocker_id == current_user.id,
+                            BlockedUser.blocked_id == partner.id),
+                    db.and_(BlockedUser.blocker_id == partner.id,
+                            BlockedUser.blocked_id == current_user.id),
+                )
+            ).first()
+            if is_blocked:
+                return
 
     msg = Message(channel_id=channel_id, sender_id=current_user.id, content=content)
     db.session.add(msg)

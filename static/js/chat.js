@@ -219,6 +219,9 @@ async function renderChatActions(ch) {
       if (status?.they_blocked) {
         input.placeholder = "Вы заблокированы";
         input.disabled = true;
+      } else if (status?.i_blocked) {
+        input.placeholder = "Вы заблокировали этого пользователя";
+        input.disabled = true;
       }
     }
     return;
@@ -510,8 +513,15 @@ async function showUserProfile(userId, username, event) {
   }
 
   popup.classList.remove("d-none");
-  popup.style.left = (rect.right + 8) + "px";
-  popup.style.top  = rect.top + "px";
+  const popupW = 180;
+  const popupH = popup.offsetHeight || 70;
+  const spaceRight = window.innerWidth - rect.right;
+  const left = spaceRight >= popupW + 8
+    ? rect.right + 8
+    : rect.left - popupW - 8;
+  const top = Math.min(rect.top, window.innerHeight - popupH - 8);
+  popup.style.left = Math.max(4, left) + "px";
+  popup.style.top  = Math.max(4, top) + "px";
 }
 
 async function profileToggleBlock() {
@@ -523,9 +533,9 @@ async function profileToggleBlock() {
   document.getElementById("profileBlockBtn").classList.toggle("ctx-danger", !profileBlocked);
   document.getElementById("profilePopup").classList.add("d-none");
 
-  // Refresh input state if we're in DM with this user
+  // Refresh input/header if we're in DM with this user
   if (currentChannel?.is_dm && currentChannel?.partner_id === profileUserId) {
-    renderChatActions(currentChannel);
+    await renderChatActions(currentChannel);
   }
 }
 
