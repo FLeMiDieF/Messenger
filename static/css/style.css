@@ -80,7 +80,7 @@ body { background: var(--bg-3); color: var(--text); font-family: 'Segoe UI', san
   color: var(--text-muted);
   padding: .5rem 1rem .2rem;
 }
-.channel-list { overflow-y: auto; flex: 0; }
+.channel-list { overflow-y: auto; max-height: 38vh; flex-shrink: 0; }
 .channel-item {
   display: flex;
   align-items: center;
