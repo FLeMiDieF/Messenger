@@ -11,6 +11,7 @@ let searchActive      = false;
 let replyTo           = null;       // {id, sender_username, content}
 let unreadCounts      = {};         // channel_id → count
 const sidebarTyping   = {};         // channel_id → timer
+let mutedChannels     = new Set(JSON.parse(localStorage.getItem("muted") || "[]"));
 
 /* ── Sound ─────────────────────────────────────────────── */
 let _audioCtx = null;
@@ -51,7 +52,7 @@ socket.on("new_message", msg => {
     appendMessage(msg);
   } else {
     unreadCounts[msg.channel_id] = (unreadCounts[msg.channel_id] || 0) + 1;
-    playNotifSound();
+    if (!mutedChannels.has(msg.channel_id)) playNotifSound();
   }
   bumpChannelPreview(msg.channel_id, msg.content);
 });
@@ -210,19 +211,23 @@ function renderSidebar(channels) {
   dmList.innerHTML = "";
 
   channels.forEach(ch => {
+    const unread = unreadCounts[ch.id] || 0;
+    const muted  = mutedChannels.has(ch.id);
     const el = document.createElement("div");
-    el.className = "channel-item" + (ch.id === currentChannel?.id ? " active" : "");
+    el.className = "channel-item" +
+      (ch.id === currentChannel?.id ? " active" : "") +
+      (unread ? " has-unread" : "");
     el.dataset.chId = ch.id;
     el.onclick = () => openChannel(ch.id);
 
     const icon = ch.is_dm ? "bi-person-fill" : (ch.is_private ? "bi-lock-fill" : "bi-hash");
-    const unread = unreadCounts[ch.id] || 0;
     el.innerHTML = `
       <i class="bi ${icon} flex-shrink-0" style="font-size:.8rem"></i>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ch.name)}</div>
+        <div style="font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${unread ? 700 : 400}">${esc(ch.name)}</div>
         <div class="ch-preview">${esc(ch.last_message || "")}</div>
       </div>
+      ${muted ? '<i class="bi bi-bell-slash text-muted" style="font-size:.72rem;flex-shrink:0"></i>' : ""}
       ${unread ? `<span class="unread-badge">${unread > 99 ? "99+" : unread}</span>` : ""}`;
 
     (ch.is_dm ? dmList : chList).appendChild(el);
@@ -246,7 +251,6 @@ function bumpChannelPreview(channelId, content) {
 /* ── Open channel ──────────────────────────────────────── */
 async function openChannel(id) {
   delete unreadCounts[id];
-  if (currentChannel) socket.emit("leave", { channel_id: currentChannel.id });
 
   const data = await api(`/api/channels/${id}`);
   currentChannel = data;
@@ -286,6 +290,17 @@ async function openChannel(id) {
   document.getElementById("msgInput").focus();
 }
 
+function toggleMute(channelId) {
+  if (mutedChannels.has(channelId)) {
+    mutedChannels.delete(channelId);
+  } else {
+    mutedChannels.add(channelId);
+  }
+  localStorage.setItem("muted", JSON.stringify([...mutedChannels]));
+  renderChatActions(currentChannel);
+  renderSidebar(allChannels);
+}
+
 async function renderChatActions(ch) {
   const wrap = document.getElementById("chatActions");
   wrap.innerHTML = "";
@@ -294,9 +309,15 @@ async function renderChatActions(ch) {
   input.placeholder = "Написать сообщение...";
   input.disabled = false;
 
+  // Mute button always shown
+  const isMuted = mutedChannels.has(ch.id);
+  wrap.innerHTML = `
+    <button class="btn-icon" title="${isMuted ? "Включить звук" : "Заглушить"}" onclick="toggleMute(${ch.id})">
+      <i class="bi bi-bell${isMuted ? "-slash" : ""}-fill"></i>
+    </button>`;
+
   if (ch.is_dm) {
-    // Delete chat button always visible for DMs
-    wrap.innerHTML = `
+    wrap.innerHTML += `
       <button class="btn-icon text-danger" title="Удалить переписку" onclick="deleteDm(${ch.id})">
         <i class="bi bi-trash"></i> <span style="font-size:.8rem">Удалить переписку</span>
       </button>`;
