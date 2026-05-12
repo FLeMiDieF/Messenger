@@ -53,6 +53,9 @@ def join_channel(channel_id):
         return jsonify({"error": "Уже в канале"}), 409
     db.session.add(ChannelMember(channel_id=ch.id, user_id=current_user.id, role="member"))
     db.session.commit()
+    from extensions import socketio
+    member_data = {**current_user.to_dict(), "role": "member", "channel_id": ch.id}
+    socketio.emit("member_joined", member_data, room=f"channel_{ch.id}")
     return jsonify(ch.to_dict(current_user.id)), 201
 
 
