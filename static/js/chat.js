@@ -251,6 +251,7 @@ function bumpChannelPreview(channelId, content) {
 /* ── Open channel ──────────────────────────────────────── */
 async function openChannel(id) {
   delete unreadCounts[id];
+  renderSidebar(allChannels);
 
   const data = await api(`/api/channels/${id}`);
   currentChannel = data;
