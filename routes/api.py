@@ -83,6 +83,13 @@ def channel_detail(channel_id):
     ]
     data = ch.to_dict(current_user.id)
     data["members"] = members
+    if ch.is_dm:
+        partner = next(
+            (mem.user for mem in ch.members if mem.user_id != current_user.id),
+            None
+        )
+        data["name"] = partner.username if partner else "Удалён"
+        data["partner_id"] = partner.id if partner else None
     return jsonify(data)
 
 

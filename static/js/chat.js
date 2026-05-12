@@ -1,17 +1,22 @@
 /* ── State ─────────────────────────────────────────────── */
 const socket = io({ transports: ["websocket"] });
-let currentChannel = null;
-let allChannels    = [];
-let ctxMessageId   = null;
-let typingTimer    = null;
-let oldestMsgId    = null;
+let currentChannel  = null;
+let allChannels     = [];
+let ctxMessageId    = null;
+let typingTimer     = null;
+let oldestMsgId     = null;
+let profileUserId   = null;
+let profileBlocked  = false;
 
 /* ── Init ──────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("myUsername").textContent = MY_USERNAME;
   document.getElementById("myAvatar").textContent   = MY_USERNAME[0].toUpperCase();
   loadChannels();
-  document.addEventListener("click", hideCtxMenu);
+  document.addEventListener("click", () => {
+    hideCtxMenu();
+    document.getElementById("profilePopup").classList.add("d-none");
+  });
 });
 
 /* ── Socket events ─────────────────────────────────────── */
@@ -168,34 +173,24 @@ async function renderChatActions(ch) {
   const wrap = document.getElementById("chatActions");
   wrap.innerHTML = "";
 
+  const input = document.getElementById("msgInput");
+  input.placeholder = "Написать сообщение...";
+  input.disabled = false;
+
   if (ch.is_dm) {
-    const partnerId = ch.partner_id;
-    if (!partnerId) return;
-    const status = await api(`/api/users/${partnerId}/block_status`);
-
-    if (status.i_blocked) {
-      wrap.innerHTML = `
-        <button class="btn-icon text-accent" title="Разблокировать" onclick="toggleBlock(${partnerId}, false)">
-          <i class="bi bi-slash-circle"></i> Разблокировать
-        </button>`;
-    } else {
-      wrap.innerHTML = `
-        <button class="btn-icon text-danger" title="Заблокировать" onclick="toggleBlock(${partnerId}, true)">
-          <i class="bi bi-slash-circle"></i>
-        </button>`;
-    }
-
-    wrap.innerHTML += `
+    // Delete chat button always visible for DMs
+    wrap.innerHTML = `
       <button class="btn-icon text-danger" title="Удалить переписку" onclick="deleteDm(${ch.id})">
-        <i class="bi bi-trash"></i>
+        <i class="bi bi-trash"></i> <span style="font-size:.8rem">Удалить переписку</span>
       </button>`;
 
-    if (status.they_blocked) {
-      document.getElementById("msgInput").placeholder = "Вы заблокированы";
-      document.getElementById("msgInput").disabled = true;
-    } else {
-      document.getElementById("msgInput").placeholder = "Написать сообщение...";
-      document.getElementById("msgInput").disabled = false;
+    // Check block status if we know the partner
+    if (ch.partner_id) {
+      const status = await api(`/api/users/${ch.partner_id}/block_status`).catch(() => null);
+      if (status?.they_blocked) {
+        input.placeholder = "Вы заблокированы";
+        input.disabled = true;
+      }
     }
     return;
   }
@@ -312,7 +307,7 @@ function buildMessageEl(msg) {
     </div>`;
 
   div.innerHTML = `
-    <div class="avatar">${msg.sender_username[0].toUpperCase()}</div>
+    <div class="avatar" style="cursor:pointer" onclick="showUserProfile(${msg.sender_id},'${esc(msg.sender_username)}',event)">${msg.sender_username[0].toUpperCase()}</div>
     <div class="msg-body">
       <div class="msg-header">
         <span class="msg-author">${esc(msg.sender_username)}</span>
@@ -461,22 +456,54 @@ async function toggleAdmin(userId, currentRole) {
   renderMembers(ch.members || []);
 }
 
-/* ── Block / Delete DM ─────────────────────────────────── */
-async function toggleBlock(userId, doBlock) {
-  const action = doBlock ? "block" : "unblock";
-  const label  = doBlock ? "заблокировать" : "разблокировать";
-  if (!confirm(`${label.charAt(0).toUpperCase() + label.slice(1)} пользователя?`)) return;
-  await api(`/api/users/${userId}/${action}`, "POST");
-  // Refresh header buttons & input state
-  const ch = await api(`/api/channels/${currentChannel.id}`);
-  currentChannel = { ...currentChannel, ...ch };
-  renderChatActions(currentChannel);
+/* ── Profile popup (avatar click) ──────────────────────── */
+async function showUserProfile(userId, username, event) {
+  event.stopPropagation();
+  profileUserId = userId;
+
+  document.getElementById("profileUsername").textContent = username;
+
+  const popup   = document.getElementById("profilePopup");
+  const blockBtn = document.getElementById("profileBlockBtn");
+  const blockText = document.getElementById("profileBlockText");
+
+  // Hide block option for self
+  if (userId === ME) {
+    blockBtn.style.display = "none";
+  } else {
+    blockBtn.style.display = "";
+    const status = await api(`/api/users/${userId}/block_status`).catch(() => null);
+    profileBlocked = status?.i_blocked ?? false;
+    blockText.textContent = profileBlocked ? "Разблокировать" : "Заблокировать";
+    blockBtn.classList.toggle("ctx-danger", !profileBlocked);
+  }
+
+  popup.classList.remove("d-none");
+  const rect = event.currentTarget.getBoundingClientRect();
+  popup.style.left = (rect.right + 8) + "px";
+  popup.style.top  = rect.top + "px";
 }
 
+async function profileToggleBlock() {
+  if (!profileUserId || profileUserId === ME) return;
+  const action = profileBlocked ? "unblock" : "block";
+  await api(`/api/users/${profileUserId}/${action}`, "POST");
+  profileBlocked = !profileBlocked;
+  document.getElementById("profileBlockText").textContent = profileBlocked ? "Разблокировать" : "Заблокировать";
+  document.getElementById("profileBlockBtn").classList.toggle("ctx-danger", !profileBlocked);
+  document.getElementById("profilePopup").classList.add("d-none");
+
+  // Refresh input state if we're in DM with this user
+  if (currentChannel?.is_dm && currentChannel?.partner_id === profileUserId) {
+    renderChatActions(currentChannel);
+  }
+}
+
+/* ── Delete DM ─────────────────────────────────────────── */
 async function deleteDm(channelId) {
   if (!confirm("Удалить всю переписку? Это удалит чат у обоих участников.")) return;
   await api(`/api/dm/${channelId}`, "DELETE");
-  // dm_deleted socket event will handle UI cleanup
+  // dm_deleted socket event handles UI cleanup
 }
 
 /* ── DM ────────────────────────────────────────────────── */

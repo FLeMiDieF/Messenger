@@ -149,6 +149,14 @@
   </div>
 </div>
 
+<!-- Profile popup (avatar click) -->
+<div id="profilePopup" class="ctx-menu d-none" style="min-width:170px">
+  <div class="px-2 py-1 fw-semibold small" id="profileUsername"></div>
+  <div class="ctx-item" id="profileBlockBtn" onclick="profileToggleBlock()">
+    <i class="bi bi-slash-circle me-2"></i><span id="profileBlockText">Заблокировать</span>
+  </div>
+</div>
+
 <!-- Context menu (message actions) -->
 <div id="ctxMenu" class="ctx-menu d-none">
   <div id="ctxEdit"   class="ctx-item" onclick="startEdit()"><i class="bi bi-pencil me-2"></i>Редактировать</div>
