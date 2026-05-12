@@ -18,6 +18,8 @@ def on_connect():
         return False
     current_user.is_online = True
     db.session.commit()
+    # Personal room — used to push DM notifications to this user
+    join_room(f"user_{current_user.id}")
     emit("user_status", {"user_id": current_user.id, "is_online": True}, broadcast=True)
 
 

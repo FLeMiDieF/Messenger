@@ -16,6 +16,9 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg-3); color: var(--text); font-family: 'Segoe UI', sans-serif; }
 
+/* ── Bootstrap overrides ───────────────────────────────── */
+.text-muted { color: var(--text-muted) !important; }
+
 /* ── Auth ──────────────────────────────────────────────── */
 .auth-page { background: var(--bg-1); }
 .auth-card {

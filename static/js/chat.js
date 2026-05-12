@@ -54,6 +54,25 @@ socket.on("user_status", ({ user_id, is_online }) => {
   });
 });
 
+// New DM arrived while we're online
+socket.on("new_dm", ch => {
+  if (!allChannels.find(c => c.id === ch.id)) {
+    allChannels.unshift({ ...ch });
+    renderSidebar(allChannels);
+  }
+});
+
+// Chat deleted by either party
+socket.on("dm_deleted", ({ channel_id }) => {
+  allChannels = allChannels.filter(c => c.id !== channel_id);
+  renderSidebar(allChannels);
+  if (currentChannel?.id === channel_id) {
+    currentChannel = null;
+    document.getElementById("chatView").classList.add("d-none");
+    document.getElementById("welcomeScreen").classList.remove("d-none");
+  }
+});
+
 socket.on("typing", ({ username }) => {
   const el = document.getElementById("typingIndicator");
   el.textContent = `${username} печатает...`;
@@ -130,6 +149,11 @@ async function openChannel(id) {
     data.is_dm ? '<i class="bi bi-person-fill"></i>' :
     (data.is_private ? '<i class="bi bi-lock-fill"></i>' : '<i class="bi bi-hash"></i>');
 
+  // Attach partner_id for DMs (from sidebar cache)
+  const cached = allChannels.find(c => c.id === id);
+  if (data.is_dm && cached?.partner_id) data.partner_id = cached.partner_id;
+  currentChannel = data;
+
   renderChatActions(data);
   renderMembers(data.members || []);
   await loadMessages(id);
@@ -140,10 +164,41 @@ async function openChannel(id) {
   document.getElementById("msgInput").focus();
 }
 
-function renderChatActions(ch) {
+async function renderChatActions(ch) {
   const wrap = document.getElementById("chatActions");
   wrap.innerHTML = "";
-  if (ch.is_dm) return;
+
+  if (ch.is_dm) {
+    const partnerId = ch.partner_id;
+    if (!partnerId) return;
+    const status = await api(`/api/users/${partnerId}/block_status`);
+
+    if (status.i_blocked) {
+      wrap.innerHTML = `
+        <button class="btn-icon text-accent" title="Разблокировать" onclick="toggleBlock(${partnerId}, false)">
+          <i class="bi bi-slash-circle"></i> Разблокировать
+        </button>`;
+    } else {
+      wrap.innerHTML = `
+        <button class="btn-icon text-danger" title="Заблокировать" onclick="toggleBlock(${partnerId}, true)">
+          <i class="bi bi-slash-circle"></i>
+        </button>`;
+    }
+
+    wrap.innerHTML += `
+      <button class="btn-icon text-danger" title="Удалить переписку" onclick="deleteDm(${ch.id})">
+        <i class="bi bi-trash"></i>
+      </button>`;
+
+    if (status.they_blocked) {
+      document.getElementById("msgInput").placeholder = "Вы заблокированы";
+      document.getElementById("msgInput").disabled = true;
+    } else {
+      document.getElementById("msgInput").placeholder = "Написать сообщение...";
+      document.getElementById("msgInput").disabled = false;
+    }
+    return;
+  }
 
   const myRole = ch.my_role;
   if (myRole === "owner" || myRole === "admin") {
@@ -404,6 +459,24 @@ async function toggleAdmin(userId, currentRole) {
   await api(`/api/channels/${currentChannel.id}/members/${userId}/role`, "PATCH", { role: newRole });
   const ch = await api(`/api/channels/${currentChannel.id}`);
   renderMembers(ch.members || []);
+}
+
+/* ── Block / Delete DM ─────────────────────────────────── */
+async function toggleBlock(userId, doBlock) {
+  const action = doBlock ? "block" : "unblock";
+  const label  = doBlock ? "заблокировать" : "разблокировать";
+  if (!confirm(`${label.charAt(0).toUpperCase() + label.slice(1)} пользователя?`)) return;
+  await api(`/api/users/${userId}/${action}`, "POST");
+  // Refresh header buttons & input state
+  const ch = await api(`/api/channels/${currentChannel.id}`);
+  currentChannel = { ...currentChannel, ...ch };
+  renderChatActions(currentChannel);
+}
+
+async function deleteDm(channelId) {
+  if (!confirm("Удалить всю переписку? Это удалит чат у обоих участников.")) return;
+  await api(`/api/dm/${channelId}`, "DELETE");
+  // dm_deleted socket event will handle UI cleanup
 }
 
 /* ── DM ────────────────────────────────────────────────── */

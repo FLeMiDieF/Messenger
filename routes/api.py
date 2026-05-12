@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
-from models import db, User, Channel, ChannelMember, Message, HiddenMessage
+from models import db, User, Channel, ChannelMember, Message, HiddenMessage, BlockedUser
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -186,6 +186,10 @@ def create_dm(user_id):
         return jsonify({"error": "Нельзя написать самому себе"}), 400
     partner = User.query.get_or_404(user_id)
 
+    # Check if blocked
+    if BlockedUser.query.filter_by(blocker_id=user_id, blocked_id=current_user.id).first():
+        return jsonify({"error": "Вы заблокированы этим пользователем"}), 403
+
     # Check if DM already exists
     my_channels = {m.channel_id for m in current_user.memberships}
     partner_channels = {m.channel_id for m in partner.memberships}
@@ -193,7 +197,10 @@ def create_dm(user_id):
     for ch_id in shared:
         ch = Channel.query.get(ch_id)
         if ch and ch.is_dm:
-            return jsonify(ch.to_dict(current_user.id))
+            data = ch.to_dict(current_user.id)
+            data["name"] = partner.username
+            data["partner_id"] = partner.id
+            return jsonify(data)
 
     ch = Channel(name=f"dm_{current_user.id}_{user_id}", is_dm=True, owner_id=current_user.id)
     db.session.add(ch)
@@ -201,10 +208,86 @@ def create_dm(user_id):
     db.session.add(ChannelMember(channel_id=ch.id, user_id=current_user.id, role="member"))
     db.session.add(ChannelMember(channel_id=ch.id, user_id=user_id, role="member"))
     db.session.commit()
+
     data = ch.to_dict(current_user.id)
     data["name"] = partner.username
     data["partner_id"] = partner.id
+
+    # Notify the partner in real-time so they see the DM immediately
+    partner_data = ch.to_dict(user_id)
+    partner_data["name"] = current_user.username
+    partner_data["partner_id"] = current_user.id
+    partner_data["last_message"] = ""
+    partner_data["last_at"] = ch.created_at.isoformat()
+    from extensions import socketio
+    socketio.emit("new_dm", partner_data, room=f"user_{user_id}")
+
     return jsonify(data), 201
+
+
+@api.route("/dm/<int:channel_id>", methods=["DELETE"])
+@login_required
+def delete_dm(channel_id):
+    ch = Channel.query.get_or_404(channel_id)
+    if not ch.is_dm:
+        return jsonify({"error": "Не является личным чатом"}), 400
+    member = ChannelMember.query.filter_by(channel_id=channel_id, user_id=current_user.id).first()
+    if not member:
+        return jsonify({"error": "Нет доступа"}), 403
+
+    # Find partner to notify
+    partner_member = next(
+        (m for m in ch.members if m.user_id != current_user.id), None
+    )
+    partner_id = partner_member.user_id if partner_member else None
+
+    db.session.delete(ch)
+    db.session.commit()
+
+    # Notify both users to remove chat from their list
+    from extensions import socketio
+    socketio.emit("dm_deleted", {"channel_id": channel_id}, room=f"user_{current_user.id}")
+    if partner_id:
+        socketio.emit("dm_deleted", {"channel_id": channel_id}, room=f"user_{partner_id}")
+
+    return jsonify({"ok": True})
+
+
+# ── Block ───────────────────────────────────────────────────────────────────
+
+@api.route("/users/<int:user_id>/block", methods=["POST"])
+@login_required
+def block_user(user_id):
+    if user_id == current_user.id:
+        return jsonify({"error": "Нельзя заблокировать себя"}), 400
+    User.query.get_or_404(user_id)
+    existing = BlockedUser.query.filter_by(blocker_id=current_user.id, blocked_id=user_id).first()
+    if not existing:
+        db.session.add(BlockedUser(blocker_id=current_user.id, blocked_id=user_id))
+        db.session.commit()
+    return jsonify({"ok": True, "blocked": True})
+
+
+@api.route("/users/<int:user_id>/unblock", methods=["POST"])
+@login_required
+def unblock_user(user_id):
+    blocked = BlockedUser.query.filter_by(blocker_id=current_user.id, blocked_id=user_id).first()
+    if blocked:
+        db.session.delete(blocked)
+        db.session.commit()
+    return jsonify({"ok": True, "blocked": False})
+
+
+@api.route("/users/<int:user_id>/block_status")
+@login_required
+def block_status(user_id):
+    i_blocked = BlockedUser.query.filter_by(
+        blocker_id=current_user.id, blocked_id=user_id
+    ).first() is not None
+    they_blocked = BlockedUser.query.filter_by(
+        blocker_id=user_id, blocked_id=current_user.id
+    ).first() is not None
+    return jsonify({"i_blocked": i_blocked, "they_blocked": they_blocked})
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────

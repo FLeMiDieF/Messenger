@@ -118,6 +118,17 @@ class Message(db.Model):
         }
 
 
+class BlockedUser(db.Model):
+    """blocker_id has blocked blocked_id."""
+    __tablename__ = "blocked_users"
+    __table_args__ = (db.UniqueConstraint("blocker_id", "blocked_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    blocker_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    blocked_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class HiddenMessage(db.Model):
     """Message hidden for a specific user ("delete for me")."""
     __tablename__ = "hidden_messages"
