@@ -78,6 +78,27 @@ socket.on("dm_deleted", ({ channel_id }) => {
   }
 });
 
+socket.on("member_left", ({ channel_id, user_id }) => {
+  if (channel_id !== currentChannel?.id) return;
+  // Remove from members panel
+  document.querySelector(`[data-uid="${user_id}"]`)?.remove();
+  // Update count in header
+  const meta = document.getElementById("chatMeta");
+  const cur = parseInt(meta.textContent) || 0;
+  if (cur > 0) meta.textContent = `${cur - 1} участников`;
+});
+
+socket.on("you_were_kicked", ({ channel_id }) => {
+  allChannels = allChannels.filter(c => c.id !== channel_id);
+  renderSidebar(allChannels);
+  if (currentChannel?.id === channel_id) {
+    currentChannel = null;
+    document.getElementById("chatView").classList.add("d-none");
+    document.getElementById("welcomeScreen").classList.remove("d-none");
+    alert("Вы были исключены из канала.");
+  }
+});
+
 socket.on("typing", ({ username }) => {
   const el = document.getElementById("typingIndicator");
   el.textContent = `${username} печатает...`;
@@ -461,13 +482,15 @@ async function showUserProfile(userId, username, event) {
   event.stopPropagation();
   profileUserId = userId;
 
+  // Store rect BEFORE any await — currentTarget becomes null after first suspend
+  const rect = event.currentTarget.getBoundingClientRect();
+
   document.getElementById("profileUsername").textContent = username;
 
-  const popup   = document.getElementById("profilePopup");
+  const popup    = document.getElementById("profilePopup");
   const blockBtn = document.getElementById("profileBlockBtn");
   const blockText = document.getElementById("profileBlockText");
 
-  // Hide block option for self
   if (userId === ME) {
     blockBtn.style.display = "none";
   } else {
@@ -479,7 +502,6 @@ async function showUserProfile(userId, username, event) {
   }
 
   popup.classList.remove("d-none");
-  const rect = event.currentTarget.getBoundingClientRect();
   popup.style.left = (rect.right + 8) + "px";
   popup.style.top  = rect.top + "px";
 }

@@ -160,6 +160,11 @@ def kick_member(channel_id, user_id):
     member = ChannelMember.query.filter_by(channel_id=ch.id, user_id=user_id).first_or_404()
     db.session.delete(member)
     db.session.commit()
+    from extensions import socketio
+    socketio.emit("member_left", {"channel_id": channel_id, "user_id": user_id},
+                  room=f"channel_{channel_id}")
+    socketio.emit("you_were_kicked", {"channel_id": channel_id},
+                  room=f"user_{user_id}")
     return jsonify({"ok": True})
 
 
@@ -191,6 +196,9 @@ def leave_channel(channel_id):
     ).first_or_404()
     db.session.delete(member)
     db.session.commit()
+    from extensions import socketio
+    socketio.emit("member_left", {"channel_id": channel_id, "user_id": current_user.id},
+                  room=f"channel_{channel_id}")
     return jsonify({"ok": True})
 
 
