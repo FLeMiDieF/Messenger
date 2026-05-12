@@ -63,7 +63,25 @@
             <div class="text-muted small" id="chatMeta"></div>
           </div>
         </div>
-        <div class="d-flex gap-1" id="chatActions"></div>
+        <div class="d-flex align-items-center gap-1">
+          <button class="btn-icon" title="Поиск" onclick="toggleSearch()">
+            <i class="bi bi-search"></i>
+          </button>
+          <div class="d-flex gap-1" id="chatActions"></div>
+        </div>
+      </div>
+
+      <!-- Search bar (hidden by default) -->
+      <div id="msgSearchBar" class="d-none px-3 py-2" style="background:var(--bg-3);border-bottom:1px solid var(--bg-1)">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-search text-muted" style="font-size:.82rem"></i>
+          <input type="text" id="msgSearchInput" class="form-control form-control-sm"
+                 placeholder="Поиск по сообщениям..." oninput="searchMessages(this.value)"
+                 style="background:var(--bg-4);border:none;color:var(--text);box-shadow:none">
+          <button class="btn-icon" title="Закрыть" onclick="toggleSearch()">
+            <i class="bi bi-x-lg" style="font-size:.82rem"></i>
+          </button>
+        </div>
       </div>
 
       <!-- Messages -->

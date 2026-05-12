@@ -7,6 +7,7 @@ let typingTimer     = null;
 let oldestMsgId     = null;
 let profileUserId   = null;
 let profileBlocked  = false;
+let searchActive    = false;
 
 /* ── Init ──────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
@@ -107,6 +108,13 @@ socket.on("you_were_kicked", ({ channel_id }) => {
   }
 });
 
+socket.on("block_status_changed", ({ by_user_id, blocked }) => {
+  if (!currentChannel?.is_dm || currentChannel?.partner_id !== by_user_id) return;
+  const input = document.getElementById("msgInput");
+  input.disabled = blocked;
+  input.placeholder = blocked ? "Вы заблокированы" : "Написать сообщение...";
+});
+
 socket.on("typing", ({ username }) => {
   const el = document.getElementById("typingIndicator");
   el.textContent = `${username} печатает...`;
@@ -175,6 +183,11 @@ async function openChannel(id) {
 
   document.getElementById("welcomeScreen").classList.add("d-none");
   document.getElementById("chatView").classList.remove("d-none");
+
+  // Reset search on channel switch
+  document.getElementById("msgSearchBar").classList.add("d-none");
+  clearMsgSearch();
+  searchActive = false;
 
   document.getElementById("chatName").textContent = data.name;
   document.getElementById("chatMeta").textContent =
@@ -301,6 +314,32 @@ async function loadMoreMessages() {
   const prevH = area.scrollHeight;
   msgs.forEach(m => prependMessage(m));
   area.parentElement.scrollTop += area.scrollHeight - prevH;
+}
+
+/* ── Message search ────────────────────────────────────── */
+function toggleSearch() {
+  const bar = document.getElementById("msgSearchBar");
+  searchActive = bar.classList.toggle("d-none") === false;
+  if (searchActive) {
+    document.getElementById("msgSearchInput").focus();
+  } else {
+    clearMsgSearch();
+  }
+}
+
+function searchMessages(q) {
+  q = q.trim().toLowerCase();
+  document.querySelectorAll(".msg-group").forEach(el => {
+    if (!q) { el.style.display = ""; return; }
+    const text = (el.querySelector(".msg-content")?.textContent || "").toLowerCase();
+    const author = (el.querySelector(".msg-author")?.textContent || "").toLowerCase();
+    el.style.display = (text.includes(q) || author.includes(q)) ? "" : "none";
+  });
+}
+
+function clearMsgSearch() {
+  document.getElementById("msgSearchInput").value = "";
+  document.querySelectorAll(".msg-group").forEach(el => el.style.display = "");
 }
 
 function appendMessage(msg) {

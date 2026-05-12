@@ -316,6 +316,10 @@ def block_user(user_id):
     if not existing:
         db.session.add(BlockedUser(blocker_id=current_user.id, blocked_id=user_id))
         db.session.commit()
+    from extensions import socketio
+    socketio.emit("block_status_changed",
+                  {"by_user_id": current_user.id, "blocked": True},
+                  room=f"user_{user_id}")
     return jsonify({"ok": True, "blocked": True})
 
 
@@ -326,6 +330,10 @@ def unblock_user(user_id):
     if blocked:
         db.session.delete(blocked)
         db.session.commit()
+    from extensions import socketio
+    socketio.emit("block_status_changed",
+                  {"by_user_id": current_user.id, "blocked": False},
+                  room=f"user_{user_id}")
     return jsonify({"ok": True, "blocked": False})
 
 
