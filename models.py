@@ -94,6 +94,7 @@ class Message(db.Model):
     is_deleted = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     edited_at = db.Column(db.DateTime, nullable=True)
+    reply_to_id = db.Column(db.Integer, db.ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
 
     channel = db.relationship("Channel", back_populates="messages")
     sender = db.relationship("User", back_populates="messages")
@@ -105,6 +106,16 @@ class Message(db.Model):
             hidden = HiddenMessage.query.filter_by(
                 message_id=self.id, user_id=hidden_for_user_id
             ).first() is not None
+        reply_info = None
+        if self.reply_to_id:
+            r = Message.query.get(self.reply_to_id)
+            if r:
+                reply_info = {
+                    "id": r.id,
+                    "sender_username": r.sender.username if r.sender else "Удалён",
+                    "content": r.content if not r.is_deleted else "",
+                    "is_deleted": r.is_deleted,
+                }
         return {
             "id": self.id,
             "channel_id": self.channel_id,
@@ -113,6 +124,7 @@ class Message(db.Model):
             "content": "" if self.is_deleted else self.content,
             "is_deleted": self.is_deleted,
             "is_hidden": hidden,
+            "reply_to": reply_info,
             "created_at": self.created_at.isoformat() + "Z",
             "edited_at": self.edited_at.isoformat() + "Z" if self.edited_at else None,
         }

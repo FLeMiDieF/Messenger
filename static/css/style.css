@@ -197,6 +197,42 @@ body { background: var(--bg-3); color: var(--text); font-family: 'Segoe UI', san
 }
 .msg-edit-hint { font-size: .75rem; color: var(--text-muted); margin-top: .2rem; }
 
+/* Reply quote inside message */
+.msg-reply {
+  background: var(--bg-4);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: .2rem .5rem;
+  margin-bottom: .3rem;
+  font-size: .78rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msg-reply:hover { background: var(--bg-1); }
+.msg-reply .reply-author { color: var(--accent); font-weight: 600; margin-right: .35rem; }
+
+/* Message highlight on scroll-to */
+.msg-highlight { background: rgba(88,101,242,.15) !important; border-radius: 6px; transition: background .4s; }
+
+/* Unread badge */
+.unread-badge {
+  background: var(--danger);
+  color: #fff;
+  border-radius: 10px;
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Sidebar typing text */
+.ch-typing { color: var(--accent) !important; font-style: italic; }
+
 /* Date separator */
 .date-sep {
   display: flex;

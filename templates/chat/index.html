@@ -93,6 +93,19 @@
         <div id="typingIndicator" class="typing-indicator d-none"></div>
       </div>
 
+      <!-- Reply bar -->
+      <div id="replyBar" class="d-none px-3 pt-2" style="background:var(--bg-3)">
+        <div class="d-flex align-items-center gap-2 px-2 py-1"
+             style="background:var(--bg-4);border-radius:6px;border-left:3px solid var(--accent)">
+          <i class="bi bi-reply-fill" style="color:var(--accent);font-size:.82rem"></i>
+          <div style="flex:1;min-width:0">
+            <div class="small fw-semibold" style="color:var(--accent)" id="replyUsername"></div>
+            <div class="small text-muted text-truncate" id="replyPreview"></div>
+          </div>
+          <button class="btn-icon" onclick="cancelReply()"><i class="bi bi-x"></i></button>
+        </div>
+      </div>
+
       <!-- Input -->
       <div class="chat-input-area">
         <div class="chat-input-wrap">

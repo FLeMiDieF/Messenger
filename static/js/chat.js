@@ -1,13 +1,35 @@
 /* ── State ─────────────────────────────────────────────── */
 const socket = io({ transports: ["websocket"] });
-let currentChannel  = null;
-let allChannels     = [];
-let ctxMessageId    = null;
-let typingTimer     = null;
-let oldestMsgId     = null;
-let profileUserId   = null;
-let profileBlocked  = false;
-let searchActive    = false;
+let currentChannel    = null;
+let allChannels       = [];
+let ctxMessageId      = null;
+let typingTimer       = null;
+let oldestMsgId       = null;
+let profileUserId     = null;
+let profileBlocked    = false;
+let searchActive      = false;
+let replyTo           = null;       // {id, sender_username, content}
+let unreadCounts      = {};         // channel_id → count
+const sidebarTyping   = {};         // channel_id → timer
+
+/* ── Sound ─────────────────────────────────────────────── */
+let _audioCtx = null;
+function playNotifSound() {
+  try {
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    [[880, 0], [1100, 0.13]].forEach(([freq, delay]) => {
+      const osc  = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.connect(gain); gain.connect(_audioCtx.destination);
+      osc.type = "sine"; osc.frequency.value = freq;
+      const t = _audioCtx.currentTime + delay;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.15, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      osc.start(t); osc.stop(t + 0.25);
+    });
+  } catch (_) {}
+}
 
 /* ── Init ──────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
@@ -25,7 +47,12 @@ socket.on("connect",      () => console.log("WS connected"));
 socket.on("disconnect",   () => console.log("WS disconnected"));
 
 socket.on("new_message", msg => {
-  if (msg.channel_id === currentChannel?.id) appendMessage(msg);
+  if (msg.channel_id === currentChannel?.id) {
+    appendMessage(msg);
+  } else {
+    unreadCounts[msg.channel_id] = (unreadCounts[msg.channel_id] || 0) + 1;
+    playNotifSound();
+  }
   bumpChannelPreview(msg.channel_id, msg.content);
 });
 
@@ -65,6 +92,7 @@ socket.on("channel_invite", ch => {
   if (!allChannels.find(c => c.id === ch.id)) {
     allChannels.unshift(ch);
     renderSidebar(allChannels);
+    socket.emit("join", { channel_id: ch.id }); // subscribe for background notifications
   }
 });
 
@@ -142,12 +170,28 @@ socket.on("block_status_changed", ({ by_user_id, blocked }) => {
   input.placeholder = blocked ? "Вы заблокированы" : "Написать сообщение...";
 });
 
-socket.on("typing", ({ username }) => {
-  const el = document.getElementById("typingIndicator");
-  el.textContent = `${username} печатает...`;
-  el.classList.remove("d-none");
-  clearTimeout(el._timer);
-  el._timer = setTimeout(() => el.classList.add("d-none"), 2500);
+socket.on("typing", ({ username, channel_id }) => {
+  if (channel_id === currentChannel?.id) {
+    const el = document.getElementById("typingIndicator");
+    el.textContent = `${username} печатает...`;
+    el.classList.remove("d-none");
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.add("d-none"), 2500);
+  }
+  // Show typing on sidebar channel item
+  const chEl = document.querySelector(`.channel-item[data-ch-id="${channel_id}"]`);
+  const preview = chEl?.querySelector(".ch-preview");
+  if (preview) {
+    if (!preview.dataset.orig) preview.dataset.orig = preview.textContent;
+    preview.textContent = `${username} печатает...`;
+    preview.classList.add("ch-typing");
+    clearTimeout(sidebarTyping[channel_id]);
+    sidebarTyping[channel_id] = setTimeout(() => {
+      preview.textContent = preview.dataset.orig || "";
+      preview.classList.remove("ch-typing");
+      delete preview.dataset.orig;
+    }, 2500);
+  }
 });
 
 /* ── Channels ──────────────────────────────────────────── */
@@ -172,12 +216,14 @@ function renderSidebar(channels) {
     el.onclick = () => openChannel(ch.id);
 
     const icon = ch.is_dm ? "bi-person-fill" : (ch.is_private ? "bi-lock-fill" : "bi-hash");
+    const unread = unreadCounts[ch.id] || 0;
     el.innerHTML = `
       <i class="bi ${icon} flex-shrink-0" style="font-size:.8rem"></i>
       <div style="flex:1;min-width:0">
         <div style="font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ch.name)}</div>
         <div class="ch-preview">${esc(ch.last_message || "")}</div>
-      </div>`;
+      </div>
+      ${unread ? `<span class="unread-badge">${unread > 99 ? "99+" : unread}</span>` : ""}`;
 
     (ch.is_dm ? dmList : chList).appendChild(el);
   });
@@ -199,6 +245,7 @@ function bumpChannelPreview(channelId, content) {
 
 /* ── Open channel ──────────────────────────────────────── */
 async function openChannel(id) {
+  delete unreadCounts[id];
   if (currentChannel) socket.emit("leave", { channel_id: currentChannel.id });
 
   const data = await api(`/api/channels/${id}`);
@@ -211,7 +258,8 @@ async function openChannel(id) {
   document.getElementById("welcomeScreen").classList.add("d-none");
   document.getElementById("chatView").classList.remove("d-none");
 
-  // Reset search on channel switch
+  // Reset search and reply on channel switch
+  cancelReply();
   document.getElementById("msgSearchBar").classList.add("d-none");
   clearMsgSearch();
   searchActive = false;
@@ -437,16 +485,24 @@ function buildMessageEl(msg) {
     ? '<span class="deleted">Сообщение удалено</span>'
     : esc(msg.content);
 
+  const contentPreview = esc((msg.content || "").slice(0, 60));
   const actions = msg.is_deleted ? "" : `
     <div class="msg-actions">
+      <button class="btn-icon" title="Ответить" onclick="openReply(${msg.id},'${esc(msg.sender_username)}','${contentPreview}')"><i class="bi bi-reply"></i></button>
       ${canEdit ? `<button class="btn-icon" title="Редактировать" onclick="openEdit(${msg.id})"><i class="bi bi-pencil"></i></button>` : ""}
       ${canDelAll ? `<button class="btn-icon text-danger" title="Удалить для всех" onclick="confirmDelete(${msg.id},'all')"><i class="bi bi-trash"></i></button>` : ""}
       <button class="btn-icon" title="Удалить у себя" onclick="confirmDelete(${msg.id},'self')"><i class="bi bi-eye-slash"></i></button>
     </div>`;
 
+  const replyQuote = msg.reply_to ? `
+    <div class="msg-reply" onclick="scrollToMsg(${msg.reply_to.id})">
+      <span class="reply-author">${esc(msg.reply_to.sender_username)}</span>${msg.reply_to.is_deleted ? "<i>Сообщение удалено</i>" : esc((msg.reply_to.content || "").slice(0, 80))}
+    </div>` : "";
+
   div.innerHTML = `
     <div class="avatar" style="cursor:pointer" onclick="showUserProfile(${msg.sender_id},'${esc(msg.sender_username)}',event)">${msg.sender_username[0].toUpperCase()}</div>
     <div class="msg-body">
+      ${replyQuote}
       <div class="msg-header">
         <span class="msg-author">${esc(msg.sender_username)}</span>
         <span class="msg-time">${time}</span>
@@ -462,14 +518,41 @@ function buildMessageEl(msg) {
   return div;
 }
 
+/* ── Reply ─────────────────────────────────────────────── */
+function openReply(msgId, username, content) {
+  replyTo = { id: msgId, sender_username: username, content };
+  document.getElementById("replyBar").classList.remove("d-none");
+  document.getElementById("replyUsername").textContent = username;
+  document.getElementById("replyPreview").textContent = content;
+  document.getElementById("msgInput").focus();
+}
+
+function cancelReply() {
+  replyTo = null;
+  document.getElementById("replyBar").classList.add("d-none");
+}
+
+function scrollToMsg(msgId) {
+  const el = document.querySelector(`[data-msg-id="${msgId}"]`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("msg-highlight");
+  setTimeout(() => el.classList.remove("msg-highlight"), 1500);
+}
+
 /* ── Send ──────────────────────────────────────────────── */
 function sendMessage() {
   const input = document.getElementById("msgInput");
   const content = input.value.trim();
   if (!content || !currentChannel) return;
-  socket.emit("send_message", { channel_id: currentChannel.id, content });
+  socket.emit("send_message", {
+    channel_id: currentChannel.id,
+    content,
+    reply_to_id: replyTo?.id ?? null,
+  });
   input.value = "";
   autoResize(input);
+  cancelReply();
 }
 
 function handleInputKey(e) {
@@ -727,6 +810,7 @@ async function joinChannel(channelId) {
   bootstrap.Modal.getInstance(document.getElementById("browseChannelsModal")).hide();
   allChannels.unshift({ ...ch, last_message: "", last_at: new Date().toISOString() });
   renderSidebar(allChannels);
+  socket.emit("join", { channel_id: ch.id });
   openChannel(ch.id);
 }
 

@@ -18,8 +18,10 @@ def on_connect():
         return False
     current_user.is_online = True
     db.session.commit()
-    # Personal room — used to push DM notifications to this user
     join_room(f"user_{current_user.id}")
+    # Auto-join all channel rooms for background notifications
+    for m in ChannelMember.query.filter_by(user_id=current_user.id).all():
+        join_room(f"channel_{m.channel_id}")
     emit("user_status", {"user_id": current_user.id, "is_online": True}, broadcast=True)
 
 
@@ -69,7 +71,9 @@ def on_send_message(data):
             if is_blocked:
                 return
 
-    msg = Message(channel_id=channel_id, sender_id=current_user.id, content=content)
+    reply_to_id = data.get("reply_to_id") or None
+    msg = Message(channel_id=channel_id, sender_id=current_user.id, content=content,
+                  reply_to_id=reply_to_id)
     db.session.add(msg)
     db.session.commit()
 
@@ -138,5 +142,6 @@ def on_typing(data):
     channel_id = data.get("channel_id")
     if not _get_membership(channel_id):
         return
-    emit("typing", {"user_id": current_user.id, "username": current_user.username},
+    emit("typing", {"user_id": current_user.id, "username": current_user.username,
+                    "channel_id": channel_id},
          room=f"channel_{channel_id}", include_self=False)
