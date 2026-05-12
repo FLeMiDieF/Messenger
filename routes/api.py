@@ -28,6 +28,34 @@ def me():
 
 # ── Channels ───────────────────────────────────────────────────────────────
 
+@api.route("/channels/public")
+@login_required
+def public_channels():
+    """Public channels the current user is NOT a member of."""
+    my_ids = {m.channel_id for m in ChannelMember.query.filter_by(user_id=current_user.id).all()}
+    channels = Channel.query.filter_by(is_private=False, is_dm=False).all()
+    result = []
+    for ch in channels:
+        if ch.id not in my_ids:
+            d = ch.to_dict()
+            d["owner_username"] = ch.owner.username if ch.owner else "?"
+            result.append(d)
+    return jsonify(result)
+
+
+@api.route("/channels/<int:channel_id>/join", methods=["POST"])
+@login_required
+def join_channel(channel_id):
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.is_private or ch.is_dm:
+        return jsonify({"error": "Нельзя вступить в приватный или личный канал"}), 403
+    if ChannelMember.query.filter_by(channel_id=ch.id, user_id=current_user.id).first():
+        return jsonify({"error": "Уже в канале"}), 409
+    db.session.add(ChannelMember(channel_id=ch.id, user_id=current_user.id, role="member"))
+    db.session.commit()
+    return jsonify(ch.to_dict(current_user.id)), 201
+
+
 @api.route("/channels")
 @login_required
 def channels_list():

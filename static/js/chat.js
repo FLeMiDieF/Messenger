@@ -547,6 +547,43 @@ async function startDm(userId) {
 /* ── Context menu (legacy, kept for right-click) ───────── */
 function hideCtxMenu() { document.getElementById("ctxMenu").classList.add("d-none"); }
 
+/* ── Browse public channels ────────────────────────────── */
+async function openBrowseChannels() {
+  const list = document.getElementById("publicChannelsList");
+  list.innerHTML = '<div class="text-muted small text-center py-2">Загрузка...</div>';
+  new bootstrap.Modal(document.getElementById("browseChannelsModal")).show();
+
+  const channels = await api("/api/channels/public").catch(() => []);
+  list.innerHTML = "";
+  if (!channels.length) {
+    list.innerHTML = '<div class="text-muted small text-center py-2">Нет доступных каналов</div>';
+    return;
+  }
+  channels.forEach(ch => {
+    const div = document.createElement("div");
+    div.className = "user-result justify-content-between";
+    div.innerHTML = `
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-hash text-muted"></i>
+        <div>
+          <div style="font-size:.88rem;font-weight:600">${esc(ch.name)}</div>
+          <div class="text-muted" style="font-size:.75rem">${esc(ch.description || "")} · ${ch.member_count} участников</div>
+        </div>
+      </div>
+      <button class="btn btn-accent btn-sm" style="font-size:.78rem;padding:.2rem .6rem"
+        onclick="joinChannel(${ch.id})">Вступить</button>`;
+    list.appendChild(div);
+  });
+}
+
+async function joinChannel(channelId) {
+  const ch = await api(`/api/channels/${channelId}/join`, "POST");
+  bootstrap.Modal.getInstance(document.getElementById("browseChannelsModal")).hide();
+  allChannels.unshift({ ...ch, last_message: "", last_at: new Date().toISOString() });
+  renderSidebar(allChannels);
+  openChannel(ch.id);
+}
+
 /* ── Helpers ───────────────────────────────────────────── */
 async function api(url, method = "GET", body = null) {
   const opts = {
@@ -555,6 +592,14 @@ async function api(url, method = "GET", body = null) {
   };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(url, opts);
+
+  // Detect silent login redirect (session expired)
+  const ct = r.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    window.location.href = "/login";
+    throw new Error("Session expired");
+  }
+
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     alert(err.error || `Ошибка ${r.status}`);
