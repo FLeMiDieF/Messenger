@@ -15,6 +15,11 @@ class User(UserMixin, db.Model):
     is_online = db.Column(db.Boolean, default=False)
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    bio = db.Column(db.String(200), default="")
+    avatar_color = db.Column(db.String(7), default="#5865f2")
+    avatar_url = db.Column(db.String(255), default="")
+    status = db.Column(db.String(20), default="active")  # active, dnd, offline
+    display_name = db.Column(db.String(80), default="")
 
     memberships = db.relationship("ChannelMember", back_populates="user", lazy="dynamic")
     messages = db.relationship("Message", back_populates="sender", lazy="dynamic")
@@ -29,9 +34,14 @@ class User(UserMixin, db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "username": self.username,
+            "username": self.username,                                # login (immutable)
+            "display_name": self.display_name or self.username,       # what to show
             "is_online": self.is_online,
             "last_seen": self.last_seen.isoformat(),
+            "bio": self.bio or "",
+            "avatar_color": self.avatar_color or "#5865f2",
+            "avatar_url": self.avatar_url or "",
+            "status": self.status or "active",
         }
 
 
@@ -43,6 +53,8 @@ class Channel(db.Model):
     description = db.Column(db.String(300), default="")
     is_dm = db.Column(db.Boolean, default=False)
     is_private = db.Column(db.Boolean, default=False)
+    allow_calls = db.Column(db.Boolean, default=True)
+    avatar_url = db.Column(db.String(255), default="")
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -63,6 +75,8 @@ class Channel(db.Model):
             "description": self.description,
             "is_dm": self.is_dm,
             "is_private": self.is_private,
+            "allow_calls": bool(self.allow_calls) if self.allow_calls is not None else True,
+            "avatar_url": self.avatar_url or "",
             "owner_id": self.owner_id,
             "my_role": member.role if member else None,
             "member_count": len(self.members),
@@ -95,6 +109,9 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     edited_at = db.Column(db.DateTime, nullable=True)
     reply_to_id = db.Column(db.Integer, db.ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
+    attachment_url  = db.Column(db.String(255), default="")
+    attachment_type = db.Column(db.String(50), default="")  # image, video, audio, voice, file
+    attachment_name = db.Column(db.String(255), default="")
 
     channel = db.relationship("Channel", back_populates="messages")
     sender = db.relationship("User", back_populates="messages")
@@ -113,6 +130,7 @@ class Message(db.Model):
                 reply_info = {
                     "id": r.id,
                     "sender_username": r.sender.username if r.sender else "Удалён",
+                    "sender_display_name": (r.sender.display_name or r.sender.username) if r.sender else "Удалён",
                     "content": r.content if not r.is_deleted else "",
                     "is_deleted": r.is_deleted,
                 }
@@ -121,12 +139,18 @@ class Message(db.Model):
             "channel_id": self.channel_id,
             "sender_id": self.sender_id,
             "sender_username": self.sender.username if self.sender else "Удалён",
+            "sender_display_name": (self.sender.display_name or self.sender.username) if self.sender else "Удалён",
+            "sender_avatar_color": self.sender.avatar_color if self.sender else "#5865f2",
+            "sender_avatar_url": (self.sender.avatar_url if self.sender else "") or "",
             "content": "" if self.is_deleted else self.content,
             "is_deleted": self.is_deleted,
             "is_hidden": hidden,
             "reply_to": reply_info,
             "created_at": self.created_at.isoformat() + "Z",
             "edited_at": self.edited_at.isoformat() + "Z" if self.edited_at else None,
+            "attachment_url": self.attachment_url or "",
+            "attachment_type": self.attachment_type or "",
+            "attachment_name": self.attachment_name or "",
         }
 
 

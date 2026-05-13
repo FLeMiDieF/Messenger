@@ -26,6 +26,8 @@ services:
     ports:
       - "5001:5001"
     env_file: .env
+    volumes:
+      - .:/app
     depends_on:
       db:
         condition: service_healthy

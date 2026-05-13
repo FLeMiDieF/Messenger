@@ -16,3 +16,7 @@ class Config:
 
     # Flask-SocketIO
     SOCKETIO_MESSAGE_QUEUE = os.environ.get("REDIS_URL", None)
+
+    # Dev: don't cache templates / static files
+    TEMPLATES_AUTO_RELOAD = True
+    SEND_FILE_MAX_AGE_DEFAULT = 0

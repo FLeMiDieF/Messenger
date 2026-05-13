@@ -13,4 +13,4 @@ COPY . .
 
 EXPOSE 5001
 
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5001", "--timeout", "120", "app:create_app()"]
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5001", "--timeout", "120", "--reload", "app:create_app()"]

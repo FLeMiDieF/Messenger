@@ -18,6 +18,9 @@
         <button class="btn btn-icon" title="Написать сообщение" onclick="openNewDm()">
           <i class="bi bi-pencil-square"></i>
         </button>
+        <button class="btn btn-icon" title="Настройки профиля" onclick="openSettings()">
+          <i class="bi bi-gear-fill"></i>
+        </button>
       </div>
     </div>
 
@@ -26,17 +29,21 @@
              placeholder="Поиск каналов..." oninput="filterChannels(this.value)">
     </div>
 
-    <div class="sidebar-section-label">КАНАЛЫ</div>
-    <div id="channelList" class="channel-list"></div>
+    <div class="sidebar-lists">
+      <div class="sidebar-section-label">КАНАЛЫ</div>
+      <div id="channelList" class="channel-list"></div>
 
-    <div class="sidebar-section-label mt-2">ЛИЧНЫЕ СООБЩЕНИЯ</div>
-    <div id="dmList" class="channel-list"></div>
+      <div class="sidebar-section-label mt-2">ЛИЧНЫЕ СООБЩЕНИЯ</div>
+      <div id="dmList" class="channel-list"></div>
+    </div>
 
     <div class="sidebar-footer">
-      <div class="d-flex align-items-center gap-2">
-        <div class="avatar avatar-sm bg-accent text-white" id="myAvatar"></div>
-        <span class="fw-medium small text-light" id="myUsername"></span>
-      </div>
+      <div class="avatar avatar-sm" id="myAvatar" style="cursor:pointer;flex-shrink:0" onclick="openSettings()"></div>
+      <span class="fw-medium small text-light text-truncate" id="myUsername" style="flex:1;min-width:0"></span>
+      <button type="button" title="Настройки" onclick="openSettings()"
+              style="background:var(--accent);border:none;color:#fff;padding:.3rem .5rem;border-radius:6px;cursor:pointer;flex-shrink:0;font-size:1rem">
+        <i class="bi bi-gear-fill"></i>
+      </button>
       <a href="/logout" class="btn btn-icon text-muted" title="Выйти">
         <i class="bi bi-box-arrow-right"></i>
       </a>
@@ -69,6 +76,15 @@
           </button>
           <div class="d-flex gap-1" id="chatActions"></div>
         </div>
+      </div>
+
+      <!-- Active call banner -->
+      <div id="activeCallBanner" class="d-none" style="display:flex;align-items:center;gap:.6rem;padding:.55rem 1.2rem;background:linear-gradient(90deg,rgba(35,165,90,.18),rgba(35,165,90,.05));border-bottom:1px solid var(--bg-1)">
+        <i class="bi bi-telephone-fill" style="color:#23a55a;animation:pulse 1.4s infinite"></i>
+        <span class="small fw-semibold" style="color:#23a55a">Идёт звонок</span>
+        <button class="btn btn-sm ms-auto" onclick="rejoinCallFromBanner()" style="background:#23a55a;color:#fff;border:none;font-size:.78rem;padding:.2rem .7rem;border-radius:6px">
+          <i class="bi bi-telephone-fill me-1"></i>Присоединиться
+        </button>
       </div>
 
       <!-- Search bar (hidden by default) -->
@@ -106,9 +122,40 @@
         </div>
       </div>
 
+      <!-- Attachment preview -->
+      <div id="attachPreview" class="d-none px-3 pt-2" style="background:var(--bg-3)">
+        <div class="d-flex align-items-center gap-2 px-2 py-1"
+             style="background:var(--bg-4);border-radius:6px;border-left:3px solid var(--accent)">
+          <i class="bi bi-paperclip" style="color:var(--accent)"></i>
+          <span id="attachPreviewName" class="small text-truncate" style="flex:1"></span>
+          <button class="btn-icon" onclick="cancelAttach()"><i class="bi bi-x"></i></button>
+        </div>
+      </div>
+
+      <!-- Voice recording UI -->
+      <div id="recordingBar" class="d-none px-3 pt-2" style="background:var(--bg-3)">
+        <div class="d-flex align-items-center gap-2 px-3 py-2"
+             style="background:var(--bg-4);border-radius:24px">
+          <span class="rec-dot"></span>
+          <span id="recordTimer" class="small fw-semibold" style="font-variant-numeric:tabular-nums;min-width:40px">0:00</span>
+          <canvas id="recordWave" width="320" height="32" style="flex:1;height:32px"></canvas>
+          <button class="btn-icon text-danger" onclick="cancelRecording()" title="Отмена" style="font-size:1.1rem"><i class="bi bi-trash"></i></button>
+          <button class="btn-send" onclick="stopAndSendRecording()" title="Отправить" style="width:36px;height:36px;border-radius:50%">
+            <i class="bi bi-send-fill"></i>
+          </button>
+        </div>
+      </div>
+
       <!-- Input -->
       <div class="chat-input-area">
         <div class="chat-input-wrap">
+          <button class="btn-icon" title="Прикрепить файл" onclick="document.getElementById('attachFileInput').click()">
+            <i class="bi bi-paperclip"></i>
+          </button>
+          <input type="file" id="attachFileInput" style="display:none" onchange="onAttachSelected(this)">
+          <button class="btn-icon" title="Голосовое сообщение" onclick="startRecording()">
+            <i class="bi bi-mic-fill"></i>
+          </button>
           <textarea id="msgInput" class="chat-input" placeholder="Написать сообщение..."
                     rows="1" onkeydown="handleInputKey(event)" oninput="autoResize(this); sendTyping()"></textarea>
           <button class="btn-send" onclick="sendMessage()" title="Отправить">
@@ -141,6 +188,10 @@
         <div class="form-check">
           <input class="form-check-input" type="checkbox" id="newChannelPrivate">
           <label class="form-check-label small text-muted" for="newChannelPrivate">Приватный</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="newChannelAllowCalls" checked>
+          <label class="form-check-label small text-muted" for="newChannelAllowCalls">Разрешить звонки</label>
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -182,6 +233,43 @@
   </div>
 </div>
 
+<!-- Modal: Channel settings -->
+<div class="modal fade" id="channelSettingsModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content bg-dark-2 border-0">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold">Настройки канала</h6>
+        <button class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-column align-items-center mb-3 gap-2">
+          <div class="avatar" id="chSettingsAvatar" style="width:80px;height:80px;font-size:1.8rem"></div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-accent btn-sm" onclick="document.getElementById('chAvatarFile').click()">
+              <i class="bi bi-upload"></i> Загрузить
+            </button>
+            <button type="button" class="btn btn-icon text-danger" id="chRemoveAvatarBtn" onclick="removeChannelAvatar()" style="display:none">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+          <input type="file" id="chAvatarFile" accept="image/*" style="display:none" onchange="uploadChannelAvatar(this)">
+        </div>
+        <div class="mb-3">
+          <div class="form-label small text-muted mb-1">Название</div>
+          <input type="text" id="chSettingsName" class="form-control form-control-sm" maxlength="100">
+        </div>
+        <div class="mb-3">
+          <div class="form-label small text-muted mb-1">Описание</div>
+          <textarea id="chSettingsDesc" class="form-control form-control-sm" rows="2" maxlength="300"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-accent btn-sm w-100" onclick="saveChannelSettings()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Invite -->
 <div class="modal fade" id="inviteModal" tabindex="-1">
   <div class="modal-dialog modal-sm">
@@ -198,11 +286,264 @@
   </div>
 </div>
 
+<!-- Incoming call modal -->
+<div id="incomingCallModal" class="d-none" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center">
+  <div style="background:var(--bg-2);border-radius:16px;padding:2rem;text-align:center;min-width:280px;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+    <div class="avatar mx-auto mb-3" id="incomingCallAvatar" style="width:80px;height:80px;font-size:2rem"></div>
+    <div class="fw-bold mb-1" id="incomingCallName" style="font-size:1.1rem"></div>
+    <div class="text-muted small mb-3" id="incomingCallType">Входящий звонок...</div>
+    <div class="d-flex gap-3 justify-content-center">
+      <button onclick="declineCall()" title="Отклонить"
+              style="width:54px;height:54px;border-radius:50%;background:var(--danger);color:#fff;border:none;font-size:1.4rem;cursor:pointer">
+        <i class="bi bi-telephone-x-fill"></i>
+      </button>
+      <button onclick="acceptCall()" title="Принять"
+              style="width:54px;height:54px;border-radius:50%;background:#23a55a;color:#fff;border:none;font-size:1.4rem;cursor:pointer">
+        <i class="bi bi-telephone-fill"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Active call window — Discord-like -->
+<div id="callPanel" class="d-none call-window-wrap">
+  <div class="call-window">
+    <!-- Top bar -->
+    <div class="call-topbar">
+      <div class="d-flex align-items-center gap-2" style="min-width:0">
+        <div class="avatar avatar-sm" id="callAvatar"></div>
+        <div style="min-width:0">
+          <div class="fw-semibold small text-truncate" id="callName"></div>
+          <div id="callStatus" style="font-size:.72rem;color:var(--text-muted)">Соединение...</div>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span id="callTimer" class="small text-muted" style="font-variant-numeric:tabular-nums">0:00</span>
+        <button class="btn-icon" onclick="minimizeCall()" title="Свернуть"><i class="bi bi-dash-lg"></i></button>
+      </div>
+    </div>
+
+    <!-- Tiles area -->
+    <div class="call-tiles" id="callTiles">
+      <!-- Partner tile -->
+      <div class="call-tile" id="callPartnerTile">
+        <video id="callRemoteVideo" autoplay playsinline muted class="call-video d-none"></video>
+        <div class="call-avatar-xl" id="callPartnerAvatar"></div>
+        <div class="tile-vol">
+          <i class="bi bi-volume-up-fill"></i>
+          <input type="range" min="0" max="100" value="100" id="volPartnerSlider" oninput="setPartnerVolume(this.value)">
+          <span class="vol-pct" id="volPartnerPct">100%</span>
+        </div>
+        <div class="call-tile-footer">
+          <span class="speaking-dot" id="partnerSpeakingDot"></span>
+          <span id="callPartnerName" class="call-tile-name">—</span>
+        </div>
+      </div>
+      <!-- Screen share tile (shown when active) -->
+      <div class="call-tile d-none" id="callScreenTile" ondblclick="toggleScreenFullscreen()">
+        <video id="callScreenVideo" autoplay playsinline muted class="call-video"></video>
+        <div class="tile-vol d-none" id="screenVolWrap">
+          <i class="bi bi-display-fill"></i>
+          <input type="range" min="0" max="100" value="100" id="volScreenSlider" oninput="setScreenVolume(this.value)">
+          <span class="vol-pct" id="volScreenPct">100%</span>
+        </div>
+        <button class="tile-fs-btn" onclick="toggleScreenFullscreen()" title="На весь экран">
+          <i class="bi bi-arrows-fullscreen" id="screenFsIcon"></i>
+        </button>
+        <div class="call-tile-footer">
+          <i class="bi bi-display-fill text-accent"></i>
+          <span class="call-tile-name">Демонстрация экрана</span>
+        </div>
+      </div>
+      <!-- Local self tile (no volume control - it's your own audio) -->
+      <div class="call-tile" id="callLocalTile">
+        <video id="callLocalVideo" autoplay playsinline muted class="call-video d-none"></video>
+        <div class="call-avatar-xl" id="callLocalAvatar"></div>
+        <div class="call-tile-footer">
+          <span class="speaking-dot" id="meSpeakingDot"></span>
+          <span class="call-tile-name">Вы</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio elements -->
+    <audio id="callRemoteAudio" autoplay></audio>
+    <audio id="callScreenAudio" autoplay></audio>
+
+    <!-- Devices picker (collapsible) -->
+    <div id="callDevicesPanel" class="d-none call-devices">
+      <div>
+        <div class="text-muted mb-1 small"><i class="bi bi-mic-fill me-1"></i>Микрофон</div>
+        <select id="micSelect" class="form-select form-select-sm" onchange="changeMicDevice(this.value)"></select>
+      </div>
+      <div>
+        <div class="text-muted mb-1 small"><i class="bi bi-camera-video-fill me-1"></i>Камера</div>
+        <select id="camSelect" class="form-select form-select-sm" onchange="changeCamDevice(this.value)"></select>
+      </div>
+      <div>
+        <div class="text-muted mb-1 small"><i class="bi bi-volume-up-fill me-1"></i>Динамик</div>
+        <select id="spkSelect" class="form-select form-select-sm" onchange="changeSpkDevice(this.value)"></select>
+      </div>
+    </div>
+
+    <!-- Bottom controls -->
+    <div class="call-controls">
+      <button id="callMuteBtn" class="call-ctrl" onclick="toggleCallMute()" title="Микрофон">
+        <i class="bi bi-mic-fill"></i>
+      </button>
+      <button id="callDeafenBtn" class="call-ctrl" onclick="toggleCallDeafen()" title="Звук">
+        <i class="bi bi-volume-up-fill"></i>
+      </button>
+      <button id="callVideoBtn" class="call-ctrl" onclick="toggleCallVideo()" title="Камера">
+        <i class="bi bi-camera-video-fill"></i>
+      </button>
+      <div style="position:relative">
+        <button id="callScreenBtn" class="call-ctrl" onclick="toggleScreenShareMenu(event)" title="Демонстрация">
+          <i class="bi bi-display-fill"></i>
+        </button>
+        <div id="screenShareMenu" class="d-none call-share-menu">
+          <button class="call-share-item" onclick="startScreenShare('window')">
+            <i class="bi bi-window me-2"></i>Окно
+          </button>
+          <button class="call-share-item" onclick="startScreenShare('monitor')">
+            <i class="bi bi-display me-2"></i>Экран
+          </button>
+        </div>
+      </div>
+      <button class="call-ctrl" onclick="toggleCallDevices()" title="Устройства">
+        <i class="bi bi-gear-fill"></i>
+      </button>
+      <button class="call-ctrl call-ctrl-end" onclick="endCall()" title="Завершить">
+        <i class="bi bi-telephone-x-fill"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Minimized pill -->
+  <div id="callMiniBar" class="d-none call-mini" onclick="restoreCall()">
+    <div class="avatar avatar-sm" id="callMiniAvatar"></div>
+    <span class="small fw-semibold" id="callMiniName"></span>
+    <span class="small text-muted" id="callMiniTimer">0:00</span>
+  </div>
+</div>
+
+<!-- Hidden legacy element (kept for backward refs in JS — not displayed) -->
+<div class="d-none">
+  <div id="callVideoWrap"></div>
+</div>
+
+<!-- Modal: Crop avatar -->
+<div class="modal fade" id="cropModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark-2 border-0">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold">Выберите область</h6>
+        <button class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal" onclick="cancelCrop()"></button>
+      </div>
+      <div class="modal-body">
+        <div style="max-height:60vh;overflow:hidden">
+          <img id="cropImage" style="max-width:100%;display:block">
+        </div>
+        <div class="text-muted small text-center mt-2">Двигай и масштабируй область — она станет твоим аватаром</div>
+      </div>
+      <div class="modal-footer border-0 pt-0 d-flex gap-2">
+        <button class="btn btn-secondary btn-sm flex-fill" data-bs-dismiss="modal" onclick="cancelCrop()">Отмена</button>
+        <button class="btn btn-accent btn-sm flex-fill" onclick="confirmCrop()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Profile popup (avatar click) -->
-<div id="profilePopup" class="ctx-menu d-none" style="min-width:170px">
-  <div class="px-2 py-1 fw-semibold small" id="profileUsername"></div>
+<div id="profilePopup" class="ctx-menu d-none" style="min-width:210px">
+  <div class="d-flex align-items-center gap-2 px-2 py-2">
+    <div class="avatar" id="profileAvatar" style="width:42px;height:42px;font-size:1.1rem;flex-shrink:0"></div>
+    <div style="min-width:0">
+      <div class="fw-semibold small text-truncate" id="profileUsername"></div>
+      <div class="text-muted" style="font-size:.7rem" id="profileLogin"></div>
+      <div class="text-muted mt-1" style="font-size:.74rem;white-space:pre-wrap;word-break:break-word;max-width:140px" id="profileBio"></div>
+    </div>
+  </div>
+  <div style="height:1px;background:var(--bg-4);margin:.15rem 0"></div>
   <div class="ctx-item" id="profileBlockBtn" onclick="profileToggleBlock()">
     <i class="bi bi-slash-circle me-2"></i><span id="profileBlockText">Заблокировать</span>
+  </div>
+</div>
+
+<!-- Modal: Settings / Profile -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-scrollable modal-dialog-centered">
+    <div class="modal-content bg-dark-2 border-0" style="max-height:85vh">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold">Настройки профиля</h6>
+        <button class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-column align-items-center mb-3 gap-2">
+          <div class="avatar" id="settingsAvatar" style="width:80px;height:80px;font-size:1.8rem"></div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-accent btn-sm" onclick="document.getElementById('avatarFileInput').click()">
+              <i class="bi bi-upload"></i> Загрузить фото
+            </button>
+            <button type="button" class="btn btn-icon text-danger" id="removeAvatarBtn" title="Удалить фото"
+                    onclick="removeAvatar()" style="display:none">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+          <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
+          <div class="text-muted" style="font-size:.7rem">PNG, JPG, GIF, WebP · до 5 МБ</div>
+        </div>
+        <div class="mb-3">
+          <div class="form-label small text-muted mb-1">Цвет аватара (если без фото)</div>
+          <div class="d-flex flex-wrap gap-1 mb-2" id="colorPresets"></div>
+          <input type="color" id="customColor" class="form-control form-control-color form-control-sm w-100"
+                 oninput="onCustomColor()">
+        </div>
+        <div class="mb-3">
+          <div class="form-label small text-muted mb-1">Статус</div>
+          <select class="form-select form-select-sm" id="settingsStatus" onchange="changeStatus(this.value)">
+            <option value="active">🟢 Активен</option>
+            <option value="dnd">🔴 Не беспокоить</option>
+            <option value="offline">⚪ Не в сети</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="settingsNotifications" checked>
+            <label class="form-check-label small text-muted" for="settingsNotifications">
+              Системные уведомления (когда вкладка свёрнута)
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="settingsNoiseSuppression" checked>
+            <label class="form-check-label small text-muted" for="settingsNoiseSuppression">
+              Шумоподавление в звонках (вентиляторы, фон)
+            </label>
+          </div>
+        </div>
+        <div class="mb-3">
+          <div class="form-label small text-muted mb-1">Горячие клавиши звонка</div>
+          <div id="bindsList" class="d-flex flex-column gap-1"></div>
+          <button type="button" class="btn btn-sm btn-secondary mt-2 w-100" onclick="resetBinds()" style="font-size:.75rem">
+            Сбросить по умолчанию
+          </button>
+        </div>
+        <div class="mb-3">
+          <div class="form-label small text-muted mb-1">Имя (как видят другие)</div>
+          <input type="text" id="settingsDisplayName" class="form-control form-control-sm" maxlength="80" placeholder="Ваше имя">
+          <div class="text-muted mt-1" style="font-size:.7rem">Логин <span id="settingsLoginLabel" class="fw-semibold"></span> остаётся прежним и используется для поиска</div>
+        </div>
+        <div class="mb-1">
+          <div class="form-label small text-muted mb-1">О себе</div>
+          <textarea class="form-control form-control-sm" id="settingsBio" rows="3" maxlength="200"
+                    placeholder="Расскажите о себе..." oninput="updateSettingsPreview()"></textarea>
+          <div class="text-end text-muted mt-1" style="font-size:.72rem" id="bioCounter">0/200</div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-accent btn-sm w-100" onclick="saveProfile()">Сохранить</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -218,6 +559,11 @@
 <script>
   const ME = {{ current_user.id }};
   const MY_USERNAME = "{{ current_user.username }}";
+  let MY_COLOR = "{{ current_user.avatar_color or '#5865f2' }}";
+  let MY_BIO   = {{ current_user.bio | tojson }};
+  let MY_AVATAR_URL = "{{ current_user.avatar_url or '' }}";
+  let MY_STATUS = "{{ current_user.status or 'active' }}";
+  let MY_DISPLAY_NAME = {{ (current_user.display_name or current_user.username) | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}

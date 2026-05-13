@@ -9,3 +9,4 @@ messenger.db
 migrations/
 *.egg-info/
 .coverage
+static/uploads/
