@@ -703,13 +703,86 @@ a:hover { color: var(--accent-h); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 3px; }
 
+/* ── Tablet ─────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .members-panel { display: none; }
   .app-layout { grid-template-columns: var(--sidebar-w) 1fr; }
 }
-@media (max-width: 600px) {
-  .sidebar { width: 60px; }
-  .sidebar-header span, .sidebar-section-label,
-  .channel-item .ch-preview, #myUsername { display: none; }
-  .app-layout { grid-template-columns: 60px 1fr; }
+
+/* ── Mobile (≤768px) ────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+    position: relative;
+  }
+  /* Sidebar becomes a drawer */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: 84vw; max-width: 320px;
+    z-index: 1050;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    box-shadow: 2px 0 20px rgba(0,0,0,.4);
+  }
+  body.sidebar-open .sidebar { transform: translateX(0); }
+  body.sidebar-open::after {
+    content: ""; position: fixed; inset: 0;
+    background: rgba(0,0,0,.5); z-index: 1040;
+  }
+  /* Hamburger button (added by JS in chat header) */
+  .mobile-menu-btn {
+    display: inline-flex !important;
+    align-items: center; justify-content: center;
+    width: 36px; height: 36px;
+    background: transparent; border: none;
+    color: var(--text); font-size: 1.3rem;
+    cursor: pointer; margin-right: .25rem;
+  }
+  /* Chat takes full width */
+  .chat-main { width: 100vw; }
+  .chat-header { padding: .55rem .75rem; }
+  .chat-header .fw-bold { font-size: .95rem; }
+  .messages-area { padding: .6rem .75rem; }
+  .chat-input-area { padding: .5rem .75rem .6rem; }
+  /* Slightly bigger tap targets */
+  .btn-icon { padding: .45rem .55rem; font-size: 1rem; }
+  /* Messages */
+  .msg-group { gap: .5rem; }
+  .avatar { width: 32px; height: 32px; font-size: .78rem; }
+  .msg-author { font-size: .85rem; }
+  .msg-content { font-size: .92rem; }
+  .msg-attachment { max-width: 100%; }
+  .audio-player { width: 100%; }
+  /* Welcome screen */
+  .welcome-screen p { padding: 0 1rem; text-align: center; }
+  /* Sidebar header with close button */
+  .sidebar-close {
+    display: inline-flex !important;
+    background: transparent; border: none;
+    color: var(--text); font-size: 1.2rem;
+    cursor: pointer; padding: .25rem .5rem;
+  }
+  /* Modals smaller padding */
+  .modal-dialog { margin: .5rem; }
+  /* Call window full-width */
+  .call-window {
+    width: 96vw !important; max-height: 90vh;
+  }
+  .call-tiles {
+    grid-template-columns: 1fr 1fr;
+    max-height: 40vh;
+  }
+  .call-tile { min-height: 100px; }
+  .call-avatar-xl { width: 56px; height: 56px; font-size: 1.4rem; }
+  .call-controls { gap: .35rem; padding: .6rem; flex-wrap: wrap; }
+  .call-ctrl { width: 40px; height: 40px; font-size: .95rem; }
+  /* Members panel button (if shown) */
+  .members-panel { display: none; }
+  /* Profile popup wider so it doesn't go off-screen */
+  #profilePopup { max-width: 90vw; }
+  /* Sidebar footer slightly tighter */
+  .sidebar-footer { padding: .6rem .8rem; }
 }
+
+/* Hidden by default on desktop */
+.mobile-menu-btn, .sidebar-close { display: none; }

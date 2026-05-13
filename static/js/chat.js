@@ -143,9 +143,24 @@ function playNotifSound() {
 }
 
 /* ── Init ──────────────────────────────────────────────── */
+function toggleMobileSidebar() {
+  document.body.classList.toggle("sidebar-open");
+}
+function closeMobileSidebar() {
+  document.body.classList.remove("sidebar-open");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("myUsername").textContent = MY_DISPLAY_NAME;
   applyAvatar(document.getElementById("myAvatar"), MY_AVATAR_URL, MY_COLOR, MY_DISPLAY_NAME);
+  // Close mobile sidebar when tapping outside it
+  document.addEventListener("click", e => {
+    if (!document.body.classList.contains("sidebar-open")) return;
+    const sb = document.querySelector(".sidebar");
+    const burger = e.target.closest(".mobile-menu-btn");
+    if (burger) return;
+    if (sb && !sb.contains(e.target)) closeMobileSidebar();
+  });
   // Ask for notification permission
   if ("Notification" in window && Notification.permission === "default") {
     Notification.requestPermission();
@@ -467,6 +482,7 @@ function bumpChannelPreview(channelId, content) {
 async function openChannel(id) {
   delete unreadCounts[id];
   renderSidebar(allChannels);
+  closeMobileSidebar();
 
   const data = await api(`/api/channels/${id}`);
   currentChannel = data;
