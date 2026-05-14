@@ -150,9 +150,34 @@ function closeMobileSidebar() {
   document.body.classList.remove("sidebar-open");
 }
 
+async function _handlePasteImage(e) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type && item.type.startsWith("image/")) {
+      e.preventDefault();
+      const raw = item.getAsFile();
+      if (!raw) continue;
+      const ext = (raw.type.split("/")[1] || "png").toLowerCase();
+      const file = new File([raw], `screenshot_${Date.now()}.${ext}`, { type: raw.type });
+      await doAttachUpload(file);
+      return;
+    }
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("myUsername").textContent = MY_DISPLAY_NAME;
   applyAvatar(document.getElementById("myAvatar"), MY_AVATAR_URL, MY_COLOR, MY_DISPLAY_NAME);
+  // Paste image from clipboard (Ctrl+V) into the message input
+  document.getElementById("msgInput")?.addEventListener("paste", _handlePasteImage);
+  // Also catch pastes anywhere when chat is open and nothing else is focused
+  document.addEventListener("paste", e => {
+    if (!currentChannel) return;
+    const ae = document.activeElement;
+    if (ae && ["INPUT", "TEXTAREA"].includes(ae.tagName) && ae.id !== "msgInput") return;
+    _handlePasteImage(e);
+  });
   // Close mobile sidebar when tapping outside it
   document.addEventListener("click", e => {
     if (!document.body.classList.contains("sidebar-open")) return;
